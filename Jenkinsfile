@@ -49,6 +49,10 @@ pipeline {
                     sh 'ssh-keygen -t rsa -b 4096 -f id_rsa -N ""'
                     sh 'terraform init'
                     sh 'terraform apply -auto-approve'
+
+                    // Wait for the VM to boot and get its IP
+                    sh 'sleep 20'
+                    sh 'terraform apply -auto-approve'
                 }
             }
         }
