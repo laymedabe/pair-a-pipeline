@@ -13,3 +13,5 @@ crash.log
 ansible/vault_password.txt
 ansible/roles/
 
+id_rsa
+id_rsa.pub

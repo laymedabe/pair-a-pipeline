@@ -45,8 +45,6 @@ pipeline {
         stage('Provision Infrastructure') {
             steps {
                 dir('terraform') {
-                    sh 'rm -f id_rsa id_rsa.pub'
-                    sh 'ssh-keygen -t rsa -b 4096 -f id_rsa -N ""'
                     sh 'terraform init'
                     sh 'terraform apply -auto-approve'
 
