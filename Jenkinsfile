@@ -106,4 +106,3 @@ pipeline {
             echo 'Pipeline encountered an error. Failing loudly!'
         }
     }
-}
