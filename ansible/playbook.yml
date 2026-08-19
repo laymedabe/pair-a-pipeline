@@ -1,0 +1,46 @@
+---
+- name: Pair A Node Setup and Hardening
+  hosts: all
+  become: yes
+
+  vars:
+    # ---------------------------------------------------------
+    # Variable Precedence Demonstration (Play Vars)
+    # This overrides group_vars/all/vars.yml (Level 2 of 3)
+    # ---------------------------------------------------------
+    rhel9cis_warning_banner: "PLAYBOOK LEVEL ACCESS BANNER"
+
+  pre_tasks:
+    - name: Ensure xfsprogs is installed
+      package:
+        name: xfsprogs
+        state: present
+
+    - name: Format first data disk as XFS (virtio bus = /dev/vdb)
+      filesystem:
+        fstype: xfs
+        dev: /dev/vdb
+
+    - name: Format second data disk as XFS (virtio bus = /dev/vdc)
+      filesystem:
+        fstype: xfs
+        dev: /dev/vdc
+
+    - name: Mount first data disk
+      mount:
+        path: /mnt/data1
+        src: /dev/vdb
+        fstype: xfs
+        state: mounted
+
+    - name: Mount second data disk
+      mount:
+        path: /mnt/data2
+        src: /dev/vdc
+        fstype: xfs
+        state: mounted
+
+  roles:
+    - role: rhel9-cis
+      tags:
+        - hardening

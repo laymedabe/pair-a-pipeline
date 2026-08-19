@@ -1,0 +1,15 @@
+# Ignore Packer output (Golden Images)
+packer_output/
+*.qcow2
+
+# Ignore Terraform state and crash logs
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+crash.log
+
+# Ignore Ansible sensitive files
+ansible/vault_password.txt
+ansible/roles/
+

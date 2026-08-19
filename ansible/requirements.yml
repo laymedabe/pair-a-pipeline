@@ -1,0 +1,11 @@
+---
+roles:
+  - name: rhel9-cis
+    src: https://github.com/ansible-lockdown/RHEL9-CIS.git
+    scm: git
+    version: 2.3.0
+
+collections:
+  - name: community.general
+  - name: community.crypto
+  - name: ansible.posix
