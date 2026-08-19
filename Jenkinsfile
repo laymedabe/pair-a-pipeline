@@ -4,6 +4,7 @@ pipeline {
     parameters {
         booleanParam(name: 'DESTROY_AND_REBUILD', defaultValue: false, description: 'Destroy Terraform resources first, then run a full fresh rebuild')
         booleanParam(name: 'REBUILD_IMAGE', defaultValue: false, description: 'Rebuild the Packer image first, else reuse the existing one')
+        booleanParam(name: 'CLEAN_WORKSPACE', defaultValue: true, description: 'Wipe the workspace clean after pipeline finishes')
     }
 
     environment {
@@ -90,8 +91,16 @@ pipeline {
             // Archive the Goss report artifact back to Jenkins
             archiveArtifacts artifacts: 'ansible/audit_reports/*.json, ansible/audit_reports/*.html', allowEmptyArchive: true
             
-            // Clean up the workspace, ensuring no secrets or generated inventory are left behind
-            cleanWs()
+            // Replace the old cleanWs() line with this block:
+            script {
+                if (params.CLEAN_WORKSPACE) {
+                    cleanWs()
+                } else {
+                    echo 'Skipping workspace cleanup so files can be presented!'
+                }
+            }
+        }
+
         }
         failure {
             echo 'Pipeline encountered an error. Failing loudly!'
