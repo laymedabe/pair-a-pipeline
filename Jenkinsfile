@@ -22,6 +22,8 @@ pipeline {
                     // Wiped workspace means a destroy button with nothing to destroy!
                     // In a production environment, state lives in a persistent remote backend 
                     // (e.g., S3, pg, Consul) so we can run a destroy even on a fresh Jenkins workspace.
+                    sh 'rm -f id_rsa id_rsa.pub'
+                    sh 'ssh-keygen -t rsa -b 4096 -f id_rsa -N ""'
                     sh 'terraform init'
                     sh 'terraform destroy -auto-approve'
                 }
@@ -35,7 +37,7 @@ pipeline {
             steps {
                 dir('packer') {
                     sh '/usr/bin/packer init build.pkr.hcl'
-                    sh 'export PACKER_LOG=1 && /usr/bin/packer build -force build.pkr.hcl'
+                    sh '/usr/bin/packer build -force build.pkr.hcl'
                 }
             }
         }
@@ -43,6 +45,8 @@ pipeline {
         stage('Provision Infrastructure') {
             steps {
                 dir('terraform') {
+                    sh 'rm -f id_rsa id_rsa.pub'
+                    sh 'ssh-keygen -t rsa -b 4096 -f id_rsa -N ""'
                     sh 'terraform init'
                     sh 'terraform apply -auto-approve'
                 }
@@ -63,7 +67,7 @@ pipeline {
                     sh 'sed -i "s/2.16.1/2.14.0/g" roles/rhel9-cis/vars/main.yml'
 
                     // Run the playbook using only Level 1 (group_vars) and Level 2 (playbook vars)
-                    sh "ansible-playbook -i inventory/hosts.ini playbook.yml --vault-password-file vault_password.txt"
+                    sh "ansible-playbook -i inventory/hosts.ini playbook.yml --private-key ../terraform/id_rsa --vault-password-file vault_password.txt"
                 }
             }
         }
