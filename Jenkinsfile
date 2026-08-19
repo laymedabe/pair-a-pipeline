@@ -35,7 +35,7 @@ pipeline {
             steps {
                 dir('packer') {
                     sh '/usr/bin/packer init build.pkr.hcl'
-                    sh '/usr/bin/packer build -force build.pkr.hcl'
+                    sh 'export PACKER_LOG=1 && /usr/bin/packer build -force build.pkr.hcl'
                 }
             }
         }
