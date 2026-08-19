@@ -81,6 +81,15 @@ This configuration explicitly disables Level 2 rules, forces `rsyslog` over `jou
 **Why I did this:** 
 By placing this variable at the playbook level, it overrides any banner defined in `group_vars`, successfully demonstrating Level 2 precedence.
 
+
+### Proof of CIS Level 1 Enforcement
+**Code Snippet:**
+```yaml
+rhel9cis_level_2: false
+```
+**Why I did this:** 
+The Trainee Pipeline Task Brief specifically mandates **'Level 1 - Server only'** for the lockdown role. The MindPoint Group `rhel9-cis` role includes both Level 1 and Level 2 security profiles. Level 2 rules are much more restrictive and are intended for environments where security is paramount at the cost of functionality. By explicitly defining `rhel9cis_level_2: false` in my `group_vars`, I am providing hard, programmatic proof that I deliberately disabled the Level 2 rules to strictly adhere to the Level 1 Server baseline requirement requested in the project brief.
+
 #### Disk Formatting & Mounting (`playbook.yml`)
 ```yaml
   pre_tasks:
