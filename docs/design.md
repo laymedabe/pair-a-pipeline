@@ -464,3 +464,24 @@ This section outlines potential areas of improvement, technical optimizations, a
 3. **Cross-Presentation Strategy (Partner's Track):**
    * Per Section 4 & 6 of the brief, prepare to present the track completed by your partner (e.g., if you focused on Packer/Terraform, practice walking through the Ansible lockdown role, variable precedence hierarchy, and Goss auditing).
 
+
+
+## 15. Pipeline Bug Fixes & Refinements
+
+This section documents the final polishing and troubleshooting steps taken to perfect the CI/CD pipeline prior to evaluation.
+
+### 15.1 Jenkins Workspace Persistence & SSH Key Management
+* **Problem**: When Jenkins finished building, it ran `cleanWs()` and deleted the `id_rsa` SSH key it used to provision the VM. Because CIS hardens the VM and disables password logins, the VM was completely inaccessible after the pipeline ran. Also, a wiped workspace caused `terraform destroy` to fail on subsequent runs because the `terraform.tfstate` file was deleted.
+* **Fix**: Added a `CLEAN_WORKSPACE` boolean parameter to the Jenkinsfile. If unchecked, the workspace and SSH keys persist. This allows presenters to SSH into the VM after a successful build using `sudo ssh -i /var/lib/jenkins/workspace/Pair-A-Pipeline/terraform/id_rsa -o IdentitiesOnly=yes sysadmin@<VM_IP>` and allows Terraform to successfully find and destroy the previous state.
+
+### 15.2 Redundant SSH Key Generation
+* **Problem**: The `ssh-keygen` command was running twice—first in the `Teardown Infrastructure` stage and again in the `Provision Infrastructure` stage. If `Teardown` was skipped, the key was never generated.
+* **Fix**: Consolidated the key generation exclusively to the `Teardown` stage. If a user needs a fresh VM, they must check `DESTROY_AND_REBUILD`, ensuring the key is generated once and efficiently reused across the pipeline.
+
+### 15.3 MaxAuthTries CIS Rule Lockout (Rule 5.2.7)
+* **Problem**: When attempting to SSH into the VM for verification, the connection was immediately dropped with `kex_exchange_identification: Connection closed by remote host`. The CIS Level 1 playbook enforces `MaxAuthTries 4`, meaning if the user's laptop SSH client automatically tried 4 different keys from `~/.ssh/` before offering the correct one, the server dropped the connection.
+* **Fix**: Used the `-o IdentitiesOnly=yes` flag in the manual SSH command to force the client to stop guessing and only offer the specific Jenkins `id_rsa` key, bypassing the CIS rate-limit.
+
+### 15.4 Securing the Repository (.gitignore)
+* **Problem**: `id_rsa.pub` was initially committed to the repository during earlier testing, posing a secret leakage risk.
+* **Fix**: The key was deleted via `git rm`, and `id_rsa` alongside `id_rsa.pub` were explicitly added to the `.gitignore` file. This guarantees that ephemeral keys generated during local or Jenkins testing are never accidentally tracked by source control.
