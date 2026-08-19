@@ -20,6 +20,6 @@ variable "os_image_path" {
 
 variable "ssh_public_key" {
   description = "Public SSH key for the sysadmin user"
-  default     = "~/.ssh/id_ed25519.pub"
+  default     = "id_rsa.pub"
 }
 
