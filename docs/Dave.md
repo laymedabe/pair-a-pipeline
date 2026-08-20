@@ -21,20 +21,20 @@ parameters {
 **Why I did this:** 
 Hardcoding pipeline behavior is inefficient. By adding parameters, we can selectively trigger different stages. The `CLEAN_WORKSPACE` parameter was specifically added as a refinement to allow the Jenkins workspace (and the ephemeral SSH keys) to persist when we need to SSH into the VM for live demonstrations.
 
-#### Ephemeral SSH Key Management
+#### Persistent SSH Key via Jenkins Credentials
 ```groovy
-stage('Teardown Infrastructure') {
+stage('Harden with Ansible') {
     steps {
-        dir('terraform') {
-            sh 'rm -f id_rsa id_rsa.pub'
-            sh 'ssh-keygen -t rsa -b 4096 -f id_rsa -N ""'
-            // ... terraform destroy ...
+        dir('ansible') {
+            withCredentials([sshUserPrivateKey(credentialsId: 'vm-ssh-private-key', keyFileVariable: 'SSH_KEY')]) {
+                // ... ansible-playbook ...
+            }
         }
     }
 }
 ```
 **Why I did this:**
-Initially, we had a hardcoded `id_rsa.pub` in the repository, which is a massive security risk. I modified the pipeline to dynamically generate a new, ephemeral SSH key pair *during* the pipeline run. This key is used by Terraform to provision the VM and by Ansible to connect to it. I consolidated this into the `Teardown` stage to avoid redundant key generation.
+Initially, the pipeline dynamically generated a new, ephemeral SSH key pair during the run. While secure, this prevented us from cleaning the Jenkins workspace if we wanted to retain SSH access to the VM. To align with CIS and standard CI/CD best practices, we switched to a persistent key model: the public key (`id_rsa.pub`) is stored in Git, and the private key is stored securely in Jenkins Credentials. The pipeline now cleanly injects the private key into Ansible using `withCredentials`, allowing us to always clean the workspace (`cleanWs()`) while still maintaining our ability to SSH into the VM locally.
 
 #### Handling Workspace State Leakage
 ```groovy
