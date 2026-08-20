@@ -69,8 +69,8 @@ pipeline {
                         // Patch the strict version check out of the freshly downloaded role
                         sh 'sed -i "s/2.16.1/2.14.0/g" roles/rhel9-cis/vars/main.yml'
 
-                        // Run the playbook using only Level 1 (group_vars) and Level 2 (playbook vars)
-                        sh "ansible-playbook -i inventory/hosts.ini playbook.yml --private-key $SSH_KEY --vault-password-file vault_password.txt"
+                        // Run the playbook and inject a Level 3 Extra Var to demonstrate absolute precedence
+                        sh "ansible-playbook -i inventory/hosts.ini playbook.yml -e \"rhel9cis_warning_banner='LEVEL 3 EXTRA VARS BANNER'\" --private-key $SSH_KEY --vault-password-file vault_password.txt"
                     }
                 }
             }
