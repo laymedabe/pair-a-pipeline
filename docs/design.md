@@ -455,11 +455,13 @@ This section outlines potential areas of improvement, technical optimizations, a
    * **Defense:** Due to physical host laptop constraints (3GB host RAM), the infrastructure was scaled to 1 VM with 1GB RAM to prevent host OOM kernel panics. The Terraform code and dynamic inventory templates are written generically using dynamic `for` loops, meaning the pipeline seamlessly scales to 2 or more nodes simply by updating `vm_count = 2` without any code modifications.
 
 2. **Live `virsh` Demonstration Tasks (Section 6):**
-   * Be prepared to demonstrate the four live hypervisor tasks while Jenkins runs with `DESTROY_AND_REBUILD` checked:
-     * **Prove UEFI:** `virsh dumpxml pa-node-1 | grep -iE 'loader|nvram'`
-     * **List Disks & Match to Terraform:** `virsh domblklist pa-node-1 --details`
-     * **Live Attach & Detach Disk:** `virsh attach-disk pa-node-1 /var/tmp/demo-disk.qcow2 vdd --targetbus virtio --live --config` and `virsh detach-disk pa-node-1 vdd --live --config`
-     * **Walk Storage Pool:** `virsh pool-info pool_a && virsh vol-list pool_a`
+   * **CRITICAL NOTE:** Because Terraform provisions these VMs on the system-level daemon, you must run all demonstration commands using `sudo` and explicitly point to the system URI (`-c qemu:///system`). If you just type `virsh`, it will look in your empty user session and fail!
+   * Be prepared to demonstrate the live hypervisor tasks while Jenkins runs with `DESTROY_AND_REBUILD` checked:
+     * **Find VM IP Address:** `sudo virsh -c qemu:///system net-dhcp-leases default`
+     * **Prove UEFI:** `sudo virsh -c qemu:///system dumpxml pa-node-1 | grep -iE 'loader|nvram'`
+     * **List Disks & Match to Terraform:** `sudo virsh -c qemu:///system domblklist pa-node-1 --details`
+     * **Live Attach & Detach Disk:** `sudo virsh -c qemu:///system attach-disk pa-node-1 /var/tmp/demo-disk.qcow2 vdd --targetbus virtio --live --config` and `sudo virsh -c qemu:///system detach-disk pa-node-1 vdd --live --config`
+     * **Walk Storage Pool:** `sudo virsh -c qemu:///system pool-info pool_a && sudo virsh -c qemu:///system vol-list pool_a`
 
 3. **Cross-Presentation Strategy (Partner's Track):**
    * Per Section 4 & 6 of the brief, prepare to present the track completed by your partner (e.g., if you focused on Packer/Terraform, practice walking through the Ansible lockdown role, variable precedence hierarchy, and Goss auditing).
