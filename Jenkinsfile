@@ -4,7 +4,7 @@ pipeline {
     parameters {
         booleanParam(name: 'DESTROY_AND_REBUILD', defaultValue: false, description: 'Destroy Terraform resources first, then run a full fresh rebuild')
         booleanParam(name: 'REBUILD_IMAGE', defaultValue: false, description: 'Rebuild the Packer image first, else reuse the existing one')
-        booleanParam(name: 'CLEAN_WORKSPACE', defaultValue: true, description: 'Wipe the workspace clean after pipeline finishes')
+        booleanParam(name: 'CLEAN_WORKSPACE', defaultValue: false, description: 'Wipe the workspace clean after pipeline finishes')
     }
 
     environment {
