@@ -23,8 +23,6 @@ pipeline {
                     // Wiped workspace means a destroy button with nothing to destroy!
                     // In a production environment, state lives in a persistent remote backend 
                     // (e.g., S3, pg, Consul) so we can run a destroy even on a fresh Jenkins workspace.
-                    sh 'rm -f id_rsa id_rsa.pub'
-                    sh 'ssh-keygen -t rsa -b 4096 -f id_rsa -N ""'
                     sh 'terraform init'
                     sh 'terraform destroy -auto-approve'
                 }
@@ -59,18 +57,21 @@ pipeline {
         stage('Harden with Ansible') {
             steps {
                 dir('ansible') {
-                    // Install the pinned CIS role and required collections from requirements.yml
-                    sh 'ansible-galaxy role install -r requirements.yml -p roles/ --force'
-                    sh 'ansible-galaxy collection install -r requirements.yml --force'
-                    
-                    // Create a dummy vault password file from the Jenkins credential for this run
-                    sh 'echo $VAULT_PASS > vault_password.txt'
+                    // Pull the private key securely from Jenkins credentials
+                    withCredentials([sshUserPrivateKey(credentialsId: 'vm-ssh-private-key', keyFileVariable: 'SSH_KEY')]) {
+                        // Install the pinned CIS role and required collections from requirements.yml
+                        sh 'ansible-galaxy role install -r requirements.yml -p roles/ --force'
+                        sh 'ansible-galaxy collection install -r requirements.yml --force'
+                        
+                        // Create a dummy vault password file from the Jenkins credential for this run
+                        sh 'echo $VAULT_PASS > vault_password.txt'
 
-                    // Patch the strict version check out of the freshly downloaded role
-                    sh 'sed -i "s/2.16.1/2.14.0/g" roles/rhel9-cis/vars/main.yml'
+                        // Patch the strict version check out of the freshly downloaded role
+                        sh 'sed -i "s/2.16.1/2.14.0/g" roles/rhel9-cis/vars/main.yml'
 
-                    // Run the playbook using only Level 1 (group_vars) and Level 2 (playbook vars)
-                    sh "ansible-playbook -i inventory/hosts.ini playbook.yml --private-key ../terraform/id_rsa --vault-password-file vault_password.txt"
+                        // Run the playbook using only Level 1 (group_vars) and Level 2 (playbook vars)
+                        sh "ansible-playbook -i inventory/hosts.ini playbook.yml --private-key $SSH_KEY --vault-password-file vault_password.txt"
+                    }
                 }
             }
         }
