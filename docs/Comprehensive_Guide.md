@@ -797,3 +797,68 @@ audit_output_destination: "{{ playbook_dir }}/audit_reports/"
 audit_format: json
 ```
 </details>
+
+---
+
+## Part 3: Setup & Installation Guide (How to Recreate this Project from Scratch)
+
+If you are starting from a completely blank slate and want to recreate this entire CI/CD pipeline from scratch, follow these step-by-step procedures.
+
+### Step 1: Prepare the Local Environment
+1. **Install Dependencies:** Ensure your host machine (AlmaLinux/RHEL) has `git`, `packer`, `terraform`, `ansible`, and `libvirt` (KVM/QEMU) installed.
+2. **Start Libvirt:** Ensure the libvirt daemon is running: `sudo systemctl enable --now libvirtd`.
+
+### Step 2: Initialize the Git Repository
+1. Create a new directory and initialize Git:
+   ```bash
+   mkdir pair-a-pipeline && cd pair-a-pipeline
+   git init
+   ```
+2. Create the necessary directory structure:
+   ```bash
+   mkdir packer terraform ansible docs
+   mkdir -p ansible/group_vars/all ansible/inventory
+   ```
+3. Create the `.gitignore` file to ensure sensitive files like SSH keys and Terraform state backups are never committed.
+
+### Step 3: Write the Infrastructure Code (Packer & Terraform)
+1. **Packer:** Inside the `packer/` folder, create the `kickstart.cfg` answer file for AlmaLinux 9, and write the `build.pkr.hcl` file to build the golden image `.qcow2`.
+2. **Terraform:** Inside the `terraform/` folder, create `main.tf` to define the libvirt provider and resources, `variables.tf` for scaling inputs, and `cloud_init.cfg` to set up the default `sysadmin` user. 
+3. **Outputs:** Write the `outputs.tf` file to automatically generate the Ansible inventory file upon completion.
+
+### Step 4: Write the Configuration Management Code (Ansible)
+1. **Requirements:** Inside the `ansible/` folder, create `requirements.yml` and define the `ansible-lockdown/RHEL9-CIS` role.
+2. **Playbook:** Create `playbook.yml` to format the raw data disks and execute the CIS role.
+3. **Variables:** Inside `ansible/group_vars/all/`, create `vars.yml`. This is where you disable `rhel9cis_level_2` and configure tailoring variables like `rsyslog` and `pam_faillock`.
+
+### Step 5: Configure Jenkins Server
+1. **Install Plugins:** Ensure your Jenkins server has the **Git plugin** and **Pipeline plugin** installed.
+2. **Create Ansible Vault Credential:** 
+   - In Jenkins, navigate to **Manage Jenkins** -> **Credentials**.
+   - Add a new "Secret text" credential.
+   - Enter your secure vault password.
+   - Set the ID exactly to: `ansible-vault-password`.
+3. **Create the Jenkins Item:**
+   - On the Jenkins dashboard, click **New Item**.
+   - Name it `Pair-A-Pipeline` and select **Pipeline**.
+   - Scroll down to the **Pipeline** section.
+   - Set "Definition" to **Pipeline script from SCM**.
+   - Set "SCM" to **Git**.
+   - Enter your repository URL (e.g., `https://github.com/laymedabe/pair-a-pipeline.git`).
+   - Set the branch to `*/main` and the script path to `Jenkinsfile`.
+
+### Step 6: Orchestrate the Pipeline
+1. Create the `Jenkinsfile` in the root of your repository.
+2. Define your parameters (`DESTROY_AND_REBUILD`, `CLEAN_WORKSPACE`).
+3. Define the stages mapping to the tools we set up: `Teardown`, `Packer`, `Terraform`, `Ansible`, and `Goss Audit`.
+4. Commit all files and push to your remote Git repository:
+   ```bash
+   git add .
+   git commit -m "Initial commit: End-to-end pipeline setup"
+   git push origin main
+   ```
+
+### Step 7: Execution
+1. Go to your Jenkins dashboard and click **Build with Parameters**.
+2. For the very first run, check **DESTROY_AND_REBUILD** and **REBUILD_IMAGE** so the entire infrastructure builds from scratch.
+3. Watch the pipeline logs as Packer builds the image, Terraform spins up the VM, Ansible hardens it, and Goss generates the final 90%+ compliance report!
