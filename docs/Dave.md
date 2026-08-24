@@ -132,3 +132,52 @@ sudo ssh -i /var/lib/jenkins/workspace/Pair-A-Pipeline/terraform/id_rsa -o Ident
 ```
 **Why I did this:**
 When trying to manually verify the VM, the connection was dropped (`kex_exchange_identification`). I identified that CIS Rule 5.2.7 (`MaxAuthTries 4`) was dropping the connection because my local SSH client was offering too many wrong keys from my laptop before offering the correct Jenkins key. Passing `-o IdentitiesOnly=yes` forced the client to only use the specified key, solving the lockout issue.
+
+---
+
+## 4. Useful Command Reference
+
+### VM Connection Commands
+* **SSH via Jenkins Workspace:** 
+  ```bash
+  sudo ssh -i /var/lib/jenkins/workspace/Pair-A-Pipeline/terraform/id_rsa -o IdentitiesOnly=yes sysadmin@<VM_IP>
+  ```
+* **SSH from Local User Directory:**
+  ```bash
+  ssh -i /home/aw7/pair-a-pipeline/terraform/id_rsa sysadmin@192.168.122.30
+  ```
+
+### Log & System Management Commands (Inside VM)
+* **Check rsyslog Status:** `sudo systemctl status rsyslog`
+* **Restart rsyslog:** `sudo systemctl restart rsyslog`
+* **Test rsyslog Configuration Syntax:** `sudo rsyslogd -N1`
+* **View Main System Logs:** `sudo tail -f /var/log/messages`
+* **View Security/Authentication Logs:** `sudo tail -f /var/log/secure`
+* **Check journald Configuration (CIS forwarding check):** `grep -r 'ForwardToSyslog' /etc/systemd/journald.conf`
+
+### Libvirt & Hypervisor Commands (On Host Machine)
+* **Find VM IP Address (DHCP Leases):** 
+  ```bash
+  sudo virsh -c qemu:///system net-dhcp-leases default
+  ```
+* **Prove UEFI Boot Configuration:** 
+  ```bash
+  sudo virsh -c qemu:///system dumpxml pa-node-1 | grep -iE 'loader|nvram'
+  ```
+* **List Disks (Verify Terraform Volumes):** 
+  ```bash
+  sudo virsh -c qemu:///system domblklist pa-node-1 --details
+  ```
+* **Live Attach Disk to VM:** 
+  ```bash
+  sudo virsh -c qemu:///system attach-disk pa-node-1 /var/tmp/demo-disk.qcow2 vdd --targetbus virtio --live --config
+  ```
+* **Live Detach Disk from VM:** 
+  ```bash
+  sudo virsh -c qemu:///system detach-disk pa-node-1 vdd --live --config
+  ```
+* **Verify Storage Pool (`pool_a`):** 
+  ```bash
+  sudo virsh -c qemu:///system pool-info pool_a && sudo virsh -c qemu:///system vol-list pool_a
+  ```
+
