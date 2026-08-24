@@ -1,5 +1,8 @@
 # Dave's Track: Jenkins Automation & Ansible CIS Hardening
 
+## Project Objective
+The overall objective of this project is to build an automated CI/CD pipeline that provisions, configures, and hardens a secure AlmaLinux 9 virtual machine from scratch. The final deliverable must successfully pass a strict CIS (Center for Internet Security) Level 1 audit, demonstrating the integration of infrastructure-as-code and configuration management best practices.
+
 ## Overview
 This document details my specific contributions to the Pair A Trainee Pipeline project. While my partner handled the infrastructure provisioning (Packer and Terraform), my responsibility was to build the CI/CD orchestration using Jenkins and implement the configuration management and security hardening using Ansible.
 
