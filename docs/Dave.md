@@ -9,11 +9,11 @@ This document details my specific contributions to the Pair A Trainee Pipeline p
 ## 1. Jenkins CI/CD Pipeline (`Jenkinsfile`)
 
 ### Objective
-To create a fully automated, declarative pipeline that orchestrates the entire infrastructure lifecycle without human intervention.
+To create a fully automated, declarative pipeline that orchestrates the entire infrastructure lifecycle without human intervention. The pipeline governs Terraform state, manages ephemeral Packer builds, and secures secrets for Ansible.
 
-### Key Implementations
+### Detailed Stage Breakdown & Implementations
 
-#### Parameterized Builds
+#### 1. Parameterized Build Logic
 ```groovy
 parameters {
     booleanParam(name: 'DESTROY_AND_REBUILD', defaultValue: false, description: 'Destroy Terraform resources first, then run a full fresh rebuild')
@@ -22,78 +22,51 @@ parameters {
 }
 ```
 **Why I did this:** 
-Hardcoding pipeline behavior is inefficient. By adding parameters, we can selectively trigger different stages. The `CLEAN_WORKSPACE` parameter was specifically added as a refinement to allow the Jenkins workspace (and the ephemeral SSH keys) to persist when we need to SSH into the VM for live demonstrations.
+Hardcoding pipeline behavior is inefficient. By adding boolean parameters, we created a modular pipeline where we can selectively trigger heavy operations. The `when { expression { ... } }` blocks in the stages dynamically evaluate these parameters to either skip or execute stages (e.g., bypassing Packer builds to save time during iterative Terraform testing). The `CLEAN_WORKSPACE` parameter was specifically added as a refinement to allow the Jenkins workspace to persist when we need to manually SSH into the VM for live demonstrations.
 
-#### Persistent SSH Key via Jenkins Credentials
+#### 2. Vault and Credential Security
 ```groovy
-stage('Harden with Ansible') {
-    steps {
-        dir('ansible') {
-            withCredentials([sshUserPrivateKey(credentialsId: 'vm-ssh-private-key', keyFileVariable: 'SSH_KEY')]) {
-                // ... ansible-playbook ...
-            }
-        }
-    }
+environment {
+    VAULT_PASS = credentials('ansible-vault-password')
+}
+// ... later in the playbook execution ...
+withCredentials([sshUserPrivateKey(credentialsId: 'vm-ssh-private-key', keyFileVariable: 'SSH_KEY')]) {
+    sh 'echo $VAULT_PASS > vault_password.txt'
+    sh "ansible-playbook ... --private-key $SSH_KEY --vault-password-file vault_password.txt"
 }
 ```
 **Why I did this:**
-Initially, the pipeline dynamically generated a new, ephemeral SSH key pair during the run. While secure, this prevented us from cleaning the Jenkins workspace if we wanted to retain SSH access to the VM. To align with CIS and standard CI/CD best practices, we switched to a persistent key model: the public key (`id_rsa.pub`) is stored in Git, and the private key is stored securely in Jenkins Credentials. The pipeline now cleanly injects the private key into Ansible using `withCredentials`, allowing us to always clean the workspace (`cleanWs()`) while still maintaining our ability to SSH into the VM locally.
+Initially, the pipeline dynamically generated a new, ephemeral SSH key pair during the run, or relied on plaintext passwords. To align with standard CI/CD and CIS best practices, we moved all sensitive material out of Git. The Ansible Vault password and the SSH private key are stored securely in Jenkins Credentials. The pipeline pulls them into ephemeral environment variables during the run, injecting them directly into the `ansible-playbook` command, preventing credential leakage.
 
-#### Handling Workspace State Leakage
+#### 3. Bypassing Strict Role Dependencies
+```groovy
+sh 'sed -i "s/2.16.1/2.14.0/g" roles/rhel9-cis/vars/main.yml'
+```
+**Why I did this:**
+The official MindPoint Group CIS role enforces a strict check for Ansible `>= 2.16.1`. Because AlmaLinux 9 natively ships with `ansible-core 2.14.x`, the pipeline would crash before running. Instead of forcing a pip upgrade of Ansible which pollutes the Jenkins agent, I used `sed` to dynamically patch the downloaded role on the fly, allowing it to run smoothly on our native OS environment.
+
+#### 4. Handling Workspace State Leakage & Artifact Archival
 ```groovy
 post {
     always {
-        script {
-            if (params.CLEAN_WORKSPACE) {
-                cleanWs()
-            }
-        }
+        archiveArtifacts artifacts: 'ansible/audit_reports/*.json, ansible/audit_reports/*.html', allowEmptyArchive: true
+        script { if (params.CLEAN_WORKSPACE) { cleanWs() } }
     }
 }
 ```
 **Why I did this:**
-Leaving build artifacts (like downloaded ISOs and Terraform plugins) clutters the Jenkins server and can cause "state leakage" where a build succeeds only because of leftover files. `cleanWs()` ensures every build starts fresh unless explicitly bypassed for demonstrations.
+After Ansible hardens the VM, Goss generates compliance reports. The `archiveArtifacts` step securely pulls these HTML/JSON reports out of the workspace and attaches them to the Jenkins build history for permanent auditing. Immediately after, `cleanWs()` wipes the entire workspace (including the `vault_password.txt` file we temporarily created) to prevent secrets from lingering on the disk and to avoid "state leakage" where a future build succeeds only because of leftover files.
 
 ---
 
 ## 2. Ansible Configuration & CIS Hardening
 
 ### Objective
-To securely configure the raw AlmaLinux 9 VM provisioned by Terraform and enforce the strict CIS (Center for Internet Security) Level 1 baseline.
+To securely configure the raw AlmaLinux 9 VM provisioned by Terraform and enforce the strict CIS (Center for Internet Security) Level 1 baseline, while formatting the attached raw data disks.
 
-### Key Implementations
+### Detailed Implementations & Precedence Hierarchy
 
-#### Variable Precedence Demonstration (`group_vars/all/vars.yml` & `playbook.yml`)
-I demonstrated an understanding of Ansible variable precedence by utilizing Level 1 (`group_vars`) and Level 2 (`playbook.yml`) variables to tailor the CIS role.
-
-**Level 1 (`vars.yml`):**
-```yaml
-rhel9cis_level_2: false
-rhel9cis_syslog: rsyslog
-rhel9cis_sshd_clientaliveinterval: 300
-rhel9cis_pam_faillock_deny: 0
-```
-**Why I did this:** 
-This configuration explicitly disables Level 2 rules, forces `rsyslog` over `journald` (as required by the Pair A brief), and disables the PAM account lockout module (`pam_faillock`) so we don't accidentally lock ourselves out of the test machine during demonstrations.
-
-**Level 2 (`playbook.yml`):**
-```yaml
-  vars:
-    rhel9cis_warning_banner: "PLAYBOOK LEVEL ACCESS BANNER"
-```
-**Why I did this:** 
-By placing this variable at the playbook level, it overrides any banner defined in `group_vars`, successfully demonstrating Level 2 precedence.
-
-
-### Proof of CIS Level 1 Enforcement
-**Code Snippet:**
-```yaml
-rhel9cis_level_2: false
-```
-**Why I did this:** 
-The Trainee Pipeline Task Brief specifically mandates **'Level 1 - Server only'** for the lockdown role. The MindPoint Group `rhel9-cis` role includes both Level 1 and Level 2 security profiles. Level 2 rules are much more restrictive and are intended for environments where security is paramount at the cost of functionality. By explicitly defining `rhel9cis_level_2: false` in my `group_vars`, I am providing hard, programmatic proof that I deliberately disabled the Level 2 rules to strictly adhere to the Level 1 Server baseline requirement requested in the project brief.
-
-#### Disk Formatting & Mounting (`playbook.yml`)
+#### 1. Disk Formatting & Persistent Mounting (`pre_tasks`)
 ```yaml
   pre_tasks:
     - name: Format first data disk as XFS
@@ -108,14 +81,38 @@ The Trainee Pipeline Task Brief specifically mandates **'Level 1 - Server only'*
         state: mounted
 ```
 **Why I did this:**
-Terraform provided raw data disks on the `virtio` bus (`/dev/vdb`, `/dev/vdc`). I used Ansible `pre_tasks` to format them with the `xfs` filesystem (as required by Pair A) and persistently mount them before the CIS role runs.
+Terraform provided two raw data disks on the `virtio` bus (`/dev/vdb`, `/dev/vdc`). Because the CIS hardening role assumes a functional filesystem, I used Ansible `pre_tasks` (which execute before assigned roles) to format the disks with the `xfs` filesystem (as required by Pair A) and added them to `/etc/fstab` via the `mount` module so they persist across reboots.
 
-#### Bypassing Strict Role Dependencies (`Jenkinsfile`)
-```groovy
-sh 'sed -i "s/2.16.1/2.14.0/g" roles/rhel9-cis/vars/main.yml'
+#### 2. Proof of CIS Level 1 Enforcement
+```yaml
+rhel9cis_level_2: false
 ```
-**Why I did this:**
-The official MindPoint Group CIS role enforces a strict check for Ansible `>= 2.16.1`. Because AlmaLinux 9 natively ships with `ansible-core 2.14.x`, the pipeline would fail. I used `sed` to dynamically patch the downloaded role on the fly, allowing it to run smoothly on our native OS.
+**Why I did this:** 
+The Trainee Pipeline Task Brief specifically mandates **'Level 1 - Server only'** for the lockdown role. The MindPoint Group `rhel9-cis` role includes both Level 1 and Level 2 security profiles. Level 2 rules are much more restrictive and often break application functionality. By explicitly defining `rhel9cis_level_2: false` in my `group_vars`, I provided programmatic proof that I deliberately disabled the Level 2 rules to strictly adhere to the project brief.
+
+#### 3. Variable Precedence Demonstration (Level 1 vs Level 2)
+I demonstrated a deep understanding of Ansible variable precedence by utilizing Level 1 (`group_vars`) and Level 2 (`playbook.yml`) variables to tailor the CIS role.
+
+**Level 1 (`vars.yml` - Group/Global scope):**
+```yaml
+rhel9cis_syslog: rsyslog
+rhel9cis_sshd_clientaliveinterval: 300
+rhel9cis_pam_faillock_deny: 0
+```
+* **rsyslog over journald**: Explicitly forces the role to configure `rsyslog` instead of `journald`, fulfilling a specific Pair A design requirement.
+* **pam_faillock_deny**: Disables the PAM account lockout module. If set to the CIS default, entering the wrong SSH key 4 times would permanently lock the `sysadmin` account, which is incredibly dangerous during testing and demonstrations.
+
+**Level 2 (`playbook.yml` - Play scope):**
+```yaml
+  vars:
+    rhel9cis_warning_banner: "PLAYBOOK LEVEL ACCESS BANNER"
+```
+* By placing this variable directly in the playbook, it overrides any banner defined in `group_vars`, successfully demonstrating Level 2 precedence (which has higher priority than Level 1 group variables).
+
+#### 4. Understanding the RSyslog Duplication Quirk
+During testing, we noticed that logs like `sudo` and `ssh` were appearing twice in `/var/log/secure`. This was deeply investigated.
+* **The Cause:** The Ansible CIS role enforces a rule to route `authpriv.*` to `/var/log/secure`. Instead of placing this in a clean `/etc/rsyslog.d/` file, the role appends the rule directly into `/etc/rsyslog.conf`. Because AlmaLinux 9 already has a default `authpriv.*` rule further down in that exact same file, `rsyslog` parses the message twice, matching both rules and writing it to the disk twice.
+* **The Verdict:** While technically inefficient, it is a known behavior of the automated lockdown script. We chose to leave it intact because it successfully satisfies the Goss compliance audit without breaking system functionality.
 
 ---
 
